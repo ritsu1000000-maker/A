@@ -1,0 +1,520 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Scratch Thumbnail Tool</title>
+<style>
+:root{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color-scheme:light}
+*{box-sizing:border-box}
+body{margin:0;background:#f5f5f5;color:#222}
+main{width:min(820px,calc(100% - 28px));margin:34px auto;background:#fff;border:1px solid #ccc;padding:24px}
+h1{font-size:24px;margin:0 0 8px}
+.lead{margin:0 0 22px;color:#555;line-height:1.6}
+.switch{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px}
+button,.linkbtn{border:1px solid #555;border-radius:3px;background:#fff;color:#111;padding:10px 13px;font:inherit;font-weight:650;cursor:pointer;text-decoration:none}
+button.active,button.primary{background:#4d97ff;border-color:#347fd3;color:#fff}
+button:disabled{opacity:.55;cursor:not-allowed}
+.field{margin-bottom:16px}
+label{display:block;font-size:14px;font-weight:650;margin-bottom:6px}
+input,textarea{width:100%;border:1px solid #888;border-radius:3px;padding:10px 11px;font:inherit;background:#fff}
+textarea{min-height:105px;resize:vertical;font-family:Consolas,monospace;font-size:12px}
+.hidden{display:none}
+.size{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:end}
+.x{padding-bottom:10px;font-weight:700;color:#666}
+.drop{border:1px dashed #777;min-height:145px;display:grid;place-items:center;text-align:center;padding:16px;background:#fafafa;cursor:pointer}
+.drop img,.text-preview{display:none;max-width:100%;max-height:230px;margin-top:10px;object-fit:contain}
+.row{display:flex;gap:9px;flex-wrap:wrap;align-items:center}
+.status{margin-top:17px;border:1px solid #bbb;background:#fafafa;padding:12px;white-space:pre-wrap;word-break:break-word}
+.ok{border-color:#2e8b57}.err{border-color:#b23a3a}
+.result{display:none;margin-top:18px;border-top:1px solid #ddd;padding-top:17px}
+.url{border:1px solid #bbb;background:#f7f7f7;padding:10px;margin:8px 0 12px;word-break:break-all;font-family:Consolas,monospace;font-size:12px}
+.note{font-size:13px;color:#666;margin-top:20px;line-height:1.6}
+</style>
+</head>
+<body>
+<main>
+<h1>Scratch Thumbnail Tool</h1>
+<p class="lead">
+Scratchへログインしてサムイルを設定し、
+最後に例の <code>get_i%6d%61ge/p%72oject/...png</code> リンクを生成します。
+</p>
+
+<div class="switch">
+<button type="button" id="createTab" class="active">新規プロジェクト</button>
+<button type="button" id="overwriteTab">既存プロジェクト</button>
+</div>
+
+<form id="form">
+<input type="hidden" id="mode" name="mode" value="create">
+
+<div class="field">
+<label>Scratchユーザー名</label>
+<input name="username" autocomplete="username" required>
+</div>
+
+<div class="field">
+<label>Scratchパスワード</label>
+<input name="password" type="password" autocomplete="current-password" required>
+</div>
+
+<div id="createFields">
+<div class="field">
+<label>新しいプロジェクト名</label>
+<input name="title" value="Image upload" maxlength="100">
+</div>
+</div>
+
+<div id="overwriteFields" class="hidden">
+<div class="field">
+<label>既存プロジェクトURL または ID</label>
+<input id="projectUrl" name="project_url" placeholder="https://scratch.mit.edu/projects/1329844213/">
+</div>
+</div>
+
+<div class="field">
+<label>画像の入力方法</label>
+<div class="switch">
+<button type="button" id="fileTab" class="active">ファイル</button>
+<button type="button" id="textTab">URL / Data URL</button>
+</div>
+</div>
+
+<div id="fileSource">
+<div class="field">
+<div id="drop" class="drop">
+<div>クリックまたはドラッグ＆ドロップ<br><img id="preview" alt="preview"></div>
+</div>
+<input id="image" name="image" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+</div>
+</div>
+
+<div id="textSource" class="hidden">
+<div class="field">
+<label>画像URL / Data URL</label>
+<textarea id="imageSource" name="image_source" placeholder="https://i.imgur.com/example.png&#10;または data:image/png;base64,..."></textarea>
+<img id="textPreview" class="text-preview" alt="preview">
+</div>
+</div>
+
+<div class="field">
+<label>生成リンクのサイズ</label>
+<div class="size">
+<div>
+<label>幅</label>
+<input id="linkWidth" name="link_width" type="number" min="1" max="9999" value="5000" required>
+</div>
+<div class="x">×</div>
+<div>
+<label>高さ</label>
+<input id="linkHeight" name="link_height" type="number" min="1" max="9999" value="5000" required>
+</div>
+</div>
+<p class="note">
+ここはアップロード画像の実サイズではなく、
+<code>get_image/project/ID_幅x高さ.png</code> の幅・高さです。
+</p>
+</div>
+
+<button id="submit" class="primary" type="submit">新規作成して設定</button>
+</form>
+
+<div id="status" class="status">準備完了</div>
+
+<section id="result" class="result">
+<strong>例のエンコード版リンク</strong>
+<div id="encodedUrl" class="url"></div>
+<div class="row">
+<button id="copyEncoded" type="button">URLをコピー</button>
+<a id="openEncoded" class="linkbtn" target="_blank" rel="noopener">画像を開く</a>
+</div>
+
+<div style="margin-top:18px">
+<strong>通常表記</strong>
+<div id="normalUrl" class="url"></div>
+<div class="row">
+<button id="copyNormal" type="button">通常URLをコピー</button>
+<a id="openProject" class="linkbtn" target="_blank" rel="noopener">プロジェクトを開く</a>
+</div>
+</div>
+</section>
+
+<p class="note">
+パスワードはこのローカルPython上でログイン処理にだけ使用し、ファイルには保存しません。
+GIFはアニメーションを維持したまま軽量化を試みます。静止画はPNGへ変換して設定します。
+</p>
+</main>
+
+<script>
+const mode=document.getElementById("mode");
+const createTab=document.getElementById("createTab");
+const overwriteTab=document.getElementById("overwriteTab");
+const createFields=document.getElementById("createFields");
+const overwriteFields=document.getElementById("overwriteFields");
+const projectUrl=document.getElementById("projectUrl");
+
+const fileTab=document.getElementById("fileTab");
+const textTab=document.getElementById("textTab");
+const fileSource=document.getElementById("fileSource");
+const textSource=document.getElementById("textSource");
+
+const fileInput=document.getElementById("image");
+const imageSource=document.getElementById("imageSource");
+const drop=document.getElementById("drop");
+const preview=document.getElementById("preview");
+const textPreview=document.getElementById("textPreview");
+
+const form=document.getElementById("form");
+const submit=document.getElementById("submit");
+const statusBox=document.getElementById("status");
+
+const result=document.getElementById("result");
+const encodedUrl=document.getElementById("encodedUrl");
+const normalUrl=document.getElementById("normalUrl");
+
+const copyEncoded=document.getElementById("copyEncoded");
+const copyNormal=document.getElementById("copyNormal");
+const openEncoded=document.getElementById("openEncoded");
+const openProject=document.getElementById("openProject");
+
+let sourceMode="file";
+
+function setMode(value){
+  const creating=value==="create";
+
+  mode.value=value;
+
+  createTab.classList.toggle("active",creating);
+  overwriteTab.classList.toggle("active",!creating);
+
+  createFields.classList.toggle("hidden",!creating);
+  overwriteFields.classList.toggle("hidden",creating);
+
+  projectUrl.required=!creating;
+
+  submit.textContent=
+    creating
+      ?"新規作成して設定"
+      :"既存プロジェクトへ設定";
+}
+
+function setSource(value){
+  const file=value==="file";
+
+  sourceMode=value;
+
+  fileTab.classList.toggle("active",file);
+  textTab.classList.toggle("active",!file);
+
+  fileSource.classList.toggle("hidden",!file);
+  textSource.classList.toggle("hidden",file);
+
+  if(file){
+    imageSource.value="";
+    textPreview.style.display="none";
+  }else{
+    fileInput.value="";
+    preview.style.display="none";
+  }
+}
+
+createTab.onclick=()=>setMode("create");
+overwriteTab.onclick=()=>setMode("overwrite");
+
+fileTab.onclick=()=>setSource("file");
+textTab.onclick=()=>setSource("text");
+
+function useFile(file){
+  if(!file)return;
+
+  const dt=new DataTransfer();
+  dt.items.add(file);
+  fileInput.files=dt.files;
+
+  const reader=new FileReader();
+
+  reader.onload=()=>{
+    preview.src=reader.result;
+    preview.style.display="block";
+  };
+
+  reader.readAsDataURL(file);
+}
+
+drop.onclick=()=>fileInput.click();
+
+fileInput.onchange=()=>{
+  useFile(fileInput.files[0]);
+};
+
+["dragenter","dragover"].forEach(name=>{
+  drop.addEventListener(name,event=>{
+    event.preventDefault();
+  });
+});
+
+drop.addEventListener("drop",event=>{
+  event.preventDefault();
+  useFile(event.dataTransfer.files[0]);
+});
+
+let previewTimer;
+
+imageSource.addEventListener("input",()=>{
+  clearTimeout(previewTimer);
+
+  previewTimer=setTimeout(()=>{
+    const value=imageSource.value.trim();
+
+    if(
+      value.startsWith("http://")||
+      value.startsWith("https://")||
+      value.startsWith("data:image/")
+    ){
+      textPreview.src=value;
+      textPreview.style.display="block";
+    }else{
+      textPreview.style.display="none";
+    }
+  },250);
+});
+
+textPreview.onerror=()=>{
+  textPreview.style.display="none";
+};
+
+function dataUrlToFile(dataUrl){
+  const match=
+    dataUrl.match(
+      /^data:([^;,]+)((?:;[^,]*)*),(.*)$/s
+    );
+
+  if(!match){
+    throw new Error(
+      "Data URLの形式が正しくありません。"
+    );
+  }
+
+  const mime=match[1].toLowerCase();
+  const params=match[2].toLowerCase();
+  const payload=match[3];
+
+  let bytes;
+
+  if(params.includes(";base64")){
+    const binary=
+      atob(
+        payload.replace(/\s+/g,"")
+      );
+
+    bytes=
+      new Uint8Array(binary.length);
+
+    for(let i=0;i<binary.length;i++){
+      bytes[i]=binary.charCodeAt(i);
+    }
+
+  }else{
+    bytes=
+      new TextEncoder().encode(
+        decodeURIComponent(payload)
+      );
+  }
+
+  if(bytes.byteLength>50*1024*1024){
+    throw new Error(
+      "Data URLは50MB以下にしてください。"
+    );
+  }
+
+  let ext="png";
+
+  if(mime.includes("gif")){
+    ext="gif";
+  }else if(
+    mime.includes("jpeg")||
+    mime.includes("jpg")
+  ){
+    ext="jpg";
+  }else if(mime.includes("webp")){
+    ext="webp";
+  }
+
+  return new File(
+    [bytes],
+    "pasted."+ext,
+    {type:mime}
+  );
+}
+
+form.onsubmit=async event=>{
+  event.preventDefault();
+
+  result.style.display="none";
+
+  if(
+    sourceMode==="file"&&
+    !fileInput.files.length
+  ){
+    statusBox.className="status err";
+    statusBox.textContent=
+      "画像を選択してください。";
+    return;
+  }
+
+  if(
+    sourceMode==="text"&&
+    !imageSource.value.trim()
+  ){
+    statusBox.className="status err";
+    statusBox.textContent=
+      "画像URLまたはData URLを入力してください。";
+    return;
+  }
+
+  submit.disabled=true;
+
+  statusBox.className="status";
+  statusBox.textContent=
+    "ログイン → 画像処理 → Scratchサムネ設定 → リンク生成中…";
+
+  try{
+    const body=
+      new FormData(form);
+
+    if(sourceMode==="file"){
+      body.delete("image_source");
+
+    }else{
+      const value=
+        imageSource.value.trim();
+
+      if(
+        value
+          .toLowerCase()
+          .startsWith("data:image/")
+      ){
+        body.delete("image_source");
+
+        body.set(
+          "image",
+          dataUrlToFile(value)
+        );
+
+      }else{
+        body.delete("image");
+      }
+    }
+
+    const response=
+      await fetch(
+        "/api/upload",
+        {
+          method:"POST",
+          body
+        }
+      );
+
+    const data=
+      await response.json();
+
+    if(
+      !response.ok||
+      !data.ok
+    ){
+      throw new Error(
+        data.error||
+        `HTTP ${response.status}`
+      );
+    }
+
+    const kb=
+      Math.round(
+        data.upload_bytes/1024
+      );
+
+    statusBox.className=
+      "status ok";
+
+    statusBox.textContent=
+      `完了！ Project ID: ${data.project_id}\n`+
+      `送信形式: ${data.upload_format} / `+
+      `${data.upload_width}×${data.upload_height} / `+
+      `${data.upload_frames}/${data.original_frames}フレーム / `+
+      `約${kb}KB`;
+
+    encodedUrl.textContent=
+      data.encoded_url;
+
+    normalUrl.textContent=
+      data.normal_url;
+
+    openEncoded.href=
+      data.encoded_url+
+      "?t="+Date.now();
+
+    openProject.href=
+      data.project_url;
+
+    result.style.display=
+      "block";
+
+  }catch(error){
+    statusBox.className=
+      "status err";
+
+    statusBox.textContent=
+      error.message||
+      String(error);
+
+  }finally{
+    submit.disabled=false;
+  }
+};
+
+async function copyText(
+  text,
+  button,
+  label
+){
+  try{
+    await navigator.clipboard.writeText(
+      text
+    );
+
+    button.textContent=
+      "コピーしました";
+
+    setTimeout(()=>{
+      button.textContent=label;
+    },1200);
+
+  }catch{
+    prompt(
+      "このURLをコピーしてください",
+      text
+    );
+  }
+}
+
+copyEncoded.onclick=()=>{
+  copyText(
+    encodedUrl.textContent,
+    copyEncoded,
+    "URLをコピー"
+  );
+};
+
+copyNormal.onclick=()=>{
+  copyText(
+    normalUrl.textContent,
+    copyNormal,
+    "通常URLをコピー"
+  );
+};
+
+setMode("create");
+setSource("file");
+</script>
+</body>
+</html>
